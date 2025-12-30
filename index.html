@@ -176,8 +176,15 @@
 
                         <div id="tourney-results" class="mt-4" style="display:none;">
                             <h6 class="fw-bold border-bottom pb-2">Win Probabilities (Simulated)</h6>
-                            <table class="table table-sm table-striped">
-                                <thead><tr><th>Rank</th><th>Player</th><th class="text-center">Win %</th></tr></thead>
+                            <table class="table table-sm table-striped align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Player</th>
+                                        <th class="text-center">Elo</th>
+                                        <th class="text-center">Win %</th>
+                                    </tr>
+                                </thead>
                                 <tbody id="tourney-table-body"></tbody>
                             </table>
                             <div class="text-muted small text-center mt-2" id="sim-details"></div>
@@ -370,19 +377,14 @@
                 const month = curr.getMonth(); // 0-11
                 const q = Math.floor(month / 3) + 1;
                 
-                // Define Quarter Start/End
-                // Q1: Jan 1 - Mar 31
-                // Q2: Apr 1 - Jun 30 etc
                 const qStartMonth = (q-1)*3;
                 const qStart = new Date(year, qStartMonth, 1);
-                const qEnd = new Date(year, qStartMonth + 3, 0); // Last day of prev month (so +3 gives last day of quarter)
+                const qEnd = new Date(year, qStartMonth + 3, 0); 
                 
-                // Only add if we haven't gone past minDate too far
                 if (qEnd >= minDate) {
                     const label = `${year} Q${q}`;
                     const val = JSON.stringify({ s: qStart.toISOString(), e: qEnd.toISOString() });
                     
-                    // Check if option exists to avoid dups (logic shim)
                     let exists = false;
                     for(let i=0; i<sel.options.length; i++) { if(sel.options[i].text === label) exists=true; }
                     
@@ -394,26 +396,22 @@
                     }
                 }
                 
-                // Also add Full Year option if it's the last quarter of that year or we are just passing by
                 if (month === 11) {
                     const yStart = new Date(year, 0, 1);
                     const yEnd = new Date(year, 11, 31);
                     const yLabel = `${year} Full Year`;
                     const yVal = JSON.stringify({ s: yStart.toISOString(), e: yEnd.toISOString() });
-                    // Insert before quarters of that year ideally, but appending is fine
                      const opt = document.createElement("option");
                     opt.value = yVal;
                     opt.text = yLabel;
                     sel.appendChild(opt);
                 }
-
                 // Move back 3 months
                 curr.setMonth(curr.getMonth() - 3);
             }
         }
 
         function generateTableData(startDate, endDate) {
-            // If no dates, return current leaderboard directly
             if (!startDate) {
                 return GLOBAL_DATA.leaderboard.map((p, index) => ({
                     rank: index + 1,
@@ -431,7 +429,6 @@
                 playerStats[p.name] = { w:0, l:0, games:0, last_ts: 0 };
             });
 
-            // 1. Calculate Stats within Range
             GLOBAL_DATA.matches.forEach(m => {
                 const d = new Date(m.d);
                 if (d >= startDate && d <= endDate) {
@@ -452,23 +449,12 @@
                 }
             });
 
-            // 2. Determine Elo at End Date
-            // We look at history array. Find last point <= endDate.
             const rows = [];
             Object.keys(playerStats).forEach(name => {
                 const stats = playerStats[name];
-                
-                // If filtering by history, we usually show players who played in that period OR had a rating.
-                // But typically tables show active players for that period.
-                // Let's include if they have games > 0 in period OR have a valid history point.
-                
                 let histElo = 0;
                 const hist = GLOBAL_DATA.history[name];
                 if (hist && hist.length > 0) {
-                    // Find the snapshot closest to endDate but not after
-                    // History format: {x: "YYYY-MM-DD", y: 1500}
-                    // Sort just in case
-                    // hist is usually sorted by date asc
                     let found = false;
                     for (let i = hist.length - 1; i >= 0; i--) {
                         const hDate = new Date(hist[i].x);
@@ -478,13 +464,12 @@
                             break;
                         }
                     }
-                    // If they had no history before end date, try to see if they started right after? No, 0.
                     if(!found) histElo = 0; 
                 }
 
                 if (stats.games > 0 || histElo > 0) {
                     const win_pct = stats.games > 0 ? ((stats.w / stats.games) * 100).toFixed(1) : "0.0";
-                    const lastDateStr = stats.last_ts > 0 ? new Date(stats.last_ts).toLocaleDateString("en-GB") : "-"; // DD/MM/YYYY
+                    const lastDateStr = stats.last_ts > 0 ? new Date(stats.last_ts).toLocaleDateString("en-GB") : "-"; 
                     
                     rows.push({
                         name: name,
@@ -496,10 +481,7 @@
                 }
             });
 
-            // Sort by Elo desc
             rows.sort((a,b) => b.elo - a.elo);
-            
-            // Add Rank
             rows.forEach((r, i) => r.rank = i + 1);
             return rows;
         }
@@ -548,7 +530,6 @@
             $('#player-select').select2({ placeholder: "Select players...", width: '100%', theme: 'bootstrap-5' });
             $('#tourney-players').select2({ placeholder: "Select participants...", width: '100%', theme: 'bootstrap-5' });
 
-            // History Chart Init
             const top5 = GLOBAL_DATA.leaderboard.slice(0, 5).map(p => p.name);
             $('#player-select').val(top5).trigger('change');
             updateChart();
@@ -595,7 +576,6 @@
             const p1Obj = GLOBAL_DATA.leaderboard.find(p => p.name === p1Name);
             const p2Obj = GLOBAL_DATA.leaderboard.find(p => p.name === p2Name);
             
-            // Fallback if players not in leaderboard (rare)
             const elo1 = p1Obj ? p1Obj.elo : 1500;
             const elo2 = p2Obj ? p2Obj.elo : 1500;
 
@@ -604,28 +584,17 @@
             const bestOf = parseInt($('#sets-input').val());
             const target = Math.ceil(bestOf / 2);
             
-            // Elo Win Probability for a single game
             const p = 1 / (1 + Math.pow(10, (elo2 - elo1) / 400));
             
             let prob1 = 0; 
             const scores = [];
             
-            // Binomial calc for match win
-            // P1 wins if they get 'target' wins before 'target' losses
-            // Max games = bestOf
-            
-            // Loop through P1 winning scenarios (target-0, target-1, ... target-(target-1))
             for (let k=0; k<target; k++) { 
-                // k is opponent wins
-                // Total games played = target + k
-                // Last game must be won by P1. Previous (target+k-1) games must have (target-1) wins for P1.
-                // Combinations(n, k) -> C(target+k-1, k)
                 const w = combinations(target+k-1, k) * Math.pow(p, target) * Math.pow(1-p, k); 
                 prob1 += w; 
                 scores.push({s:`${target}-${k}`, p:w, w:p1Name}); 
             }
             
-            // P2 winning scenarios
             for (let k=0; k<target; k++) { 
                 const w = combinations(target+k-1, k) * Math.pow(1-p, target) * Math.pow(p, k); 
                 scores.push({s:`${k}-${target}`, p:w, w:p2Name}); 
@@ -664,18 +633,15 @@
                 return;
             }
 
-            // UI Loading
             $('#btn-sim-tourney').prop('disabled', true);
             $('#tourney-loader').show();
             $('#tourney-results').hide();
 
-            // Prepare Data
             const players = selectedNames.map(n => {
                 const pObj = GLOBAL_DATA.leaderboard.find(x => x.name === n);
                 return { name: n, elo: pObj ? pObj.elo : 1500, wins: 0 };
             });
 
-            // Run Simulation Async to not freeze UI
             setTimeout(() => {
                 const ITERATIONS = 2000;
                 const winCounts = {};
@@ -688,9 +654,9 @@
                     winCounts[winner]++;
                 }
 
-                // Render Results
                 const results = players.map(p => ({
                     name: p.name,
+                    elo: p.elo, // Added Elo here
                     pct: (winCounts[p.name] / ITERATIONS * 100).toFixed(1)
                 }));
                 results.sort((a,b) => parseFloat(b.pct) - parseFloat(a.pct));
@@ -705,6 +671,7 @@
                         <tr class="${cls}">
                             <td>${idx+1}</td>
                             <td>${r.name}</td>
+                            <td class="text-center"><span class="badge bg-light text-dark border">${r.elo}</span></td>
                             <td class="text-center">${r.pct}%</td>
                         </tr>
                     `);
@@ -721,9 +688,7 @@
             }, 100);
         }
 
-        // Helper: Get winner of a Bo5 Match
         function getMatchWinner(p1, p2) {
-            // p = prob of p1 winning a single game
             const p = 1 / (1 + Math.pow(10, (p2.elo - p1.elo) / 400));
             let s1 = 0, s2 = 0;
             // Best of 5
@@ -734,7 +699,6 @@
         }
 
         function simulateRoundRobin(players) {
-            // Clone players to track points in this specific iteration
             const table = players.map(p => ({ ...p, pts: 0 }));
             
             for(let i=0; i<table.length; i++) {
@@ -744,57 +708,40 @@
                     else table[j].pts++;
                 }
             }
-            // Sort by points, then Elo (tie-break simplified)
             table.sort((a,b) => b.pts - a.pts || b.elo - a.elo);
             return table[0].name;
         }
 
         function simulateGroupKnockout(players) {
-            // 1. Seed and Distribute
-            // Sort by Elo for seeding
             const seeded = [...players].sort((a,b) => b.elo - a.elo);
-            const numGroups = Math.ceil(seeded.length / 5); // Groups of ~5
+            const numGroups = Math.ceil(seeded.length / 5); 
             const groups = Array.from({length: numGroups}, () => []);
 
-            // Snake Draft Seeding
             seeded.forEach((p, i) => {
                 const gIdx = i % numGroups;
-                // Simple distribution. Snake would be more complex but this is fair enough for estimation.
                 groups[gIdx].push({ ...p, pts: 0 });
             });
 
-            // 2. Play Groups
             const advancers = [];
             groups.forEach(g => {
-                // Round Robin in Group
                 for(let i=0; i<g.length; i++) {
                     for(let j=i+1; j<g.length; j++) {
                         const w = getMatchWinner(g[i], g[j]);
                         if(w.name === g[i].name) g[i].pts++; else g[j].pts++;
                     }
                 }
-                // Top 2 advance
                 g.sort((a,b) => b.pts - a.pts || b.elo - a.elo);
                 if(g[0]) advancers.push(g[0]);
                 if(g[1]) advancers.push(g[1]);
             });
 
-            // 3. Single Elimination Bracket with Advancers
-            // We just pair them up randomly or standard. 
-            // Simplified: Sort advancers by Elo again to simulate "Seeding" in bracket, 
-            // then Top plays Bottom (standard bracket logic).
             let currentRound = advancers.sort((a,b) => b.elo - a.elo);
 
             while(currentRound.length > 1) {
                 const nextRound = [];
-                // If odd number (rare logic edge case), top seed gets bye.
-                // But Top 2 from groups usually results in even number unless odd groups.
-                // If odd, bye for seed 1.
                 if(currentRound.length % 2 !== 0) {
                     nextRound.push(currentRound.shift());
                 }
-
-                // 1 vs Last, 2 vs 2nd Last...
                 const matches = currentRound.length / 2;
                 for(let i=0; i<matches; i++) {
                     const pA = currentRound[i];
@@ -833,14 +780,12 @@
                     if (myScore > oppScore) result = "Win";
                     if (myScore < oppScore) result = "Loss";
 
-                    // Try get Elo from history for that specific date
                     let myElo = "-";
                     if (playerHistory) {
                         const entry = playerHistory.find(h => h.x === m.d);
                         if (entry) myElo = entry.y;
                     }
 
-                    // Try get Opp Elo
                     let oppElo = "-";
                     if (GLOBAL_DATA.history[opponent]) {
                         const entry = GLOBAL_DATA.history[opponent].find(h => h.x === m.d);
