@@ -643,7 +643,8 @@
             });
 
             setTimeout(() => {
-                const ITERATIONS = 2000;
+                // INCREASED ITERATIONS: 10,000 for better accuracy on low %
+                const ITERATIONS = 10000;
                 const winCounts = {};
                 players.forEach(p => winCounts[p.name] = 0);
 
@@ -656,10 +657,16 @@
 
                 const results = players.map(p => ({
                     name: p.name,
-                    elo: p.elo, // Added Elo here
-                    pct: (winCounts[p.name] / ITERATIONS * 100).toFixed(1)
+                    elo: p.elo,
+                    pct: (winCounts[p.name] / ITERATIONS * 100).toFixed(2) // Changed to 2 decimals for precision
                 }));
-                results.sort((a,b) => parseFloat(b.pct) - parseFloat(a.pct));
+
+                // UPDATED SORTING: Sort by %, then by Elo if % is tied
+                results.sort((a,b) => {
+                    const pctDiff = parseFloat(b.pct) - parseFloat(a.pct);
+                    if (Math.abs(pctDiff) > 0) return pctDiff; // If % differs, use %
+                    return b.elo - a.elo; // If % is same, higher Elo wins
+                });
 
                 $('#tourney-table-body').empty();
                 results.forEach((r, idx) => {
@@ -681,7 +688,7 @@
                     `Groups (Top 2 Advance) + Single Elimination` : 
                     `Round Robin (League Table)`;
                     
-                $('#sim-details').text(`Format: ${formatText} | Simulated ${ITERATIONS} times.`);
+                $('#sim-details').text(`Format: ${formatText} | Simulated ${ITERATIONS.toLocaleString()} times.`);
                 $('#tourney-results').fadeIn();
                 $('#btn-sim-tourney').prop('disabled', false);
                 $('#tourney-loader').hide();
